@@ -101,7 +101,7 @@ func (mux *SlackMux) SlackHandler() func(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (mux *SlackMux) slackHandlerWrapper(w http.ResponseWriter, r *http.Request) chan bool {
+func (mux *x) slackHandlerWrapper(w http.ResponseWriter, r *http.Request) chan bool {
 	resultChan := make(chan bool, 1)
 	err := mux.parseRequestAndCheckToken(r)
 	if err != nil {
@@ -110,7 +110,7 @@ func (mux *SlackMux) slackHandlerWrapper(w http.ResponseWriter, r *http.Request)
 		return resultChan
 	}
 	user := r.FormValue("user_name")
-	text := r.FormValue("text")
+	text := removeSimpleFormatting(r.FormValue("text"))
 	responseURL := r.FormValue("response_url")
 	if text == "" && mux.defaultHandler == nil {
 		writeResponseWithBadRequest(&w, "Provide a command")
@@ -190,4 +190,26 @@ func (mux *SlackMux) postResponse(response CommandResponse, url string) error {
 		return errors.New("Post message has failed with response code: " + resp.Status + " response body: " + string(respBody))
 	}
 	return nil
+}
+
+func removeSimpleFormatting(str string) string {
+	x := []uint8{'*', '~', '_'}
+	temp := str
+	for len(temp) > 1 {
+		if contains(x, temp[0]) && temp[0] == temp[len(temp) - 1] {
+			temp = temp[1:len(temp) - 1]
+		} else {
+			break
+		}
+	}
+	return temp
+}
+
+func contains(a []uint8, x uint8) bool {
+	for _, n := range a {
+		if x == n {
+			return true
+		}
+	}
+	return false
 }
