@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/nlopes/slack"
 )
 
 type SlackMux struct {
@@ -122,12 +124,7 @@ func (mux *SlackMux) slackHandlerWrapper(w http.ResponseWriter, r *http.Request)
 		return resultChan
 	}
 
-	commands, err := mux.parseCommand(text)
-	if err != nil {
-		writeResponseWithBadRequest(&w, err.Error())
-		resultChan <- false
-		return resultChan
-	}
+	commands := strings.Fields(text)
 	commandName := getCommandName(commands)
 
 	if !mux.isCommandValid(commands, commandName) {
