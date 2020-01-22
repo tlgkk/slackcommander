@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/nlopes/slack"
 )
@@ -17,6 +18,7 @@ type SlackMux struct {
 	Token                 string
 	SkipSlackResponse     bool
 	IgnoreSlackFormatting bool
+	QuoteAwareArgParse    bool
 
 	commandMu      *sync.Mutex
 	commandMap     map[string]CommandDef
@@ -122,7 +124,17 @@ func (mux *SlackMux) slackHandlerWrapper(w http.ResponseWriter, r *http.Request)
 		return resultChan
 	}
 
-	commands := strings.Fields(text)
+	var commands []string
+	if mux.QuoteAwareArgParse {
+		commands, err = parseArgs(text)
+		if err != nil {
+			writeResponseWithBadRequest(&w, err.Error())
+			resultChan <- false
+			return resultChan
+		}
+	} else {
+		commands = strings.Fields(text)
+	}
 	commandName := getCommandName(commands)
 
 	if !mux.isCommandValid(commands, commandName) {
@@ -242,4 +254,56 @@ func contains(slice []uint8, char uint8) bool {
 		}
 	}
 	return false
+}
+
+const NullStr = rune(0)
+
+func parseArgs(str string) ([]string, error) {
+	var m []string
+	var s string
+
+	str = strings.TrimSpace(str) + " "
+	str = strings.ReplaceAll(str, "“", "\"")
+	str = strings.ReplaceAll(str, "”", "\"")
+	str = strings.ReplaceAll(str, "‘", "'")
+	str = strings.ReplaceAll(str, "’", "'")
+
+	lastQuote := NullStr
+	isSpace := false
+	for i, c := range str {
+		switch {
+		// If we're ending a quote, break out and skip this character
+		case c == lastQuote:
+			lastQuote = NullStr
+
+		// If we're in a quote, count this character
+		case lastQuote != NullStr:
+			s += string(c)
+
+		// If we encounter a quote, enter it and skip this character
+		case unicode.In(c, unicode.Quotation_Mark):
+			isSpace = false
+			lastQuote = c
+
+		// If it's a space, store the string
+		case unicode.IsSpace(c):
+			if 0 == i || isSpace {
+				continue
+			}
+			isSpace = true
+			m = append(m, s)
+			s = ""
+
+		default:
+			isSpace = false
+			s += string(c)
+		}
+
+	}
+
+	if lastQuote != NullStr {
+		return nil, fmt.Errorf("quotes did not terminate")
+	}
+
+	return m, nil
 }
