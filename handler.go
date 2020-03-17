@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-
-	"github.com/nlopes/slack"
 )
 
 type SlackMux struct {
@@ -54,7 +52,7 @@ type CommandDef struct {
 func (mux *SlackMux) parseRequestAndCheckToken(r *http.Request) error {
 	r.ParseForm()
 
-	if r.FormValue("token") != mux.Token {
+	if isTokenValid(mux, r.FormValue("token")) {
 		return errors.New("Token invalid, contact an admin")
 	}
 	return nil
@@ -250,6 +248,16 @@ func removeSimpleFormatting(str string) string {
 func contains(slice []uint8, char uint8) bool {
 	for _, t := range slice {
 		if char == t {
+			return true
+		}
+	}
+	return false
+}
+
+func isTokenValid(mux *SlackMux, token string) bool {
+	validTokens := strings.Fields(mux.Token)
+	for _, t := range validTokens {
+		if token == t {
 			return true
 		}
 	}
